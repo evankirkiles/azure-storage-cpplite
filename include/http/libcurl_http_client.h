@@ -114,6 +114,27 @@ namespace azure {  namespace storage_lite {
             check_code(curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, this));
         }
 
+        // CUSTOM RESCALE HACK FOR AZURE CLIENT
+        // Allows using a cancellation token to interrupt Azure calls
+        void set_progress_function_and_arg(void* func, void* ptr) override
+        {
+            check_code(curl_easy_setopt(m_curl, CURLOPT_XFERINFOFUNCTION, func));
+            check_code(curl_easy_setopt(m_curl, CURLOPT_XFERINFODATA, ptr));
+            check_code(curl_easy_setopt(m_curl, CURLOPT_NOPROGRESS, 0));
+        }
+
+        // Allows setting the token and not signing requests from credentials
+        void set_sas_token(const std::string& token) override
+        {
+            sas_token = token;
+        }
+
+        // Gets the sas token associated with the request
+        std::string get_sas_token() override
+        {
+            return sas_token;
+        }
+
         void set_error_stream(std::function<bool(http_code)> f, storage_iostream s) override
         {
             m_switch_error_callback = f;
@@ -198,6 +219,10 @@ namespace azure {  namespace storage_lite {
 
         http_method m_method;
         std::string m_url;
+        // RESCALE CUSTOM COMPONENT
+        // Stores SAS token with the request itself, not in credentials
+        // This allows multiple requests to be run with different credentials
+        std::string sas_token;
         storage_istream m_input_stream;
         storage_ostream m_output_stream;
         storage_iostream m_error_stream;

@@ -79,6 +79,39 @@ storage_outcome<chunk_property> blob_client::get_chunk_to_stream_sync(const std:
     return storage_outcome<chunk_property>(storage_error(response.error()));
 }
 
+// RESCALE REIMPLEMNTATION FUNCTION
+// Uses a cancellation token in the get_chunk_to_stream_sync function and sets the sas_token separately from credentials
+storage_outcome<chunk_property> blob_client::get_chunk_to_stream_sync_ctoken(const std::string &container, const std::string &blob, unsigned long long offset, unsigned long long size, std::ostream &os, const std::string& sas_token, const std::atomic<bool>* token, void* cancelFunc)
+{
+    auto http = m_client->get_handle();
+    http->set_progress_function_and_arg(cancelFunc, (void*)token);
+    http->set_sas_token(sas_token);
+
+    auto request = std::make_shared<download_blob_request>(container, blob);
+    if (size > 0) {
+        request->set_start_byte(offset);
+        request->set_end_byte(offset + size - 1);
+    }
+    else {
+        request->set_start_byte(offset);
+    }
+
+    http->set_output_stream(storage_ostream(os));
+
+    // TODO: async submit transfered to sync operation. This can be utilized.
+    const auto response = async_executor<void>::submit(m_account, request, http, m_context).get();
+    if (response.success())
+    {
+        chunk_property property{};
+        property.etag = http->get_header(constants::header_etag);
+        property.totalSize = get_length_from_content_range(http->get_header(constants::header_content_range));
+        std::istringstream(http->get_header(constants::header_content_length)) >> property.size;
+        property.last_modified = curl_getdate(http->get_header(constants::header_last_modified).c_str(), NULL);
+        return storage_outcome<chunk_property>(property);
+    }
+    return storage_outcome<chunk_property>(storage_error(response.error()));
+}
+
 std::future<storage_outcome<void>> blob_client::download_blob_to_stream(const std::string &container, const std::string &blob, unsigned long long offset, unsigned long long size, std::ostream &os)
 {
     auto http = m_client->get_handle();
@@ -228,6 +261,51 @@ std::future<storage_outcome<get_block_list_response>> blob_client::get_block_lis
 storage_outcome<blob_property> blob_client::get_blob_property(const std::string &container, const std::string &blob)
 {
     auto http = m_client->get_handle();
+
+    auto request = std::make_shared<get_blob_property_request>(container, blob);
+
+    auto response = async_executor<void>::submit(m_account, request, http, m_context).get();
+    blob_property blobProperty(true);
+    if (response.success())
+    {
+        blobProperty.cache_control = http->get_header(constants::header_cache_control);
+        blobProperty.content_disposition = http->get_header(constants::header_content_disposition);
+        blobProperty.content_encoding = http->get_header(constants::header_content_encoding);
+        blobProperty.content_language = http->get_header(constants::header_content_language);
+        blobProperty.content_md5 = http->get_header(constants::header_content_md5);
+        blobProperty.content_type = http->get_header(constants::header_content_type);
+        blobProperty.etag = http->get_header(constants::header_etag);
+        blobProperty.copy_status = http->get_header(constants::header_ms_copy_status);
+        blobProperty.last_modified = curl_getdate(http->get_header(constants::header_last_modified).c_str(), NULL);
+        std::string::size_type sz = 0;
+        std::string contentLength = http->get_header(constants::header_content_length);
+        if(contentLength.length() > 0)
+        {
+            blobProperty.size = std::stoull(contentLength, &sz, 0);
+        }
+
+        auto& headers = http->get_headers();
+        for (auto iter = headers.begin(); iter != headers.end(); ++iter)
+        {
+            if (iter->first.find("x-ms-meta-") == 0)
+            {
+                // We need to strip ten characters from the front of the key to account for "x-ms-meta-", and two characters from the end of the value, to account for the "\r\n".
+                blobProperty.metadata.push_back(std::make_pair(iter->first.substr(10), iter->second.substr(0, iter->second.size() - 2)));
+            }
+        }
+    }
+    else
+    {
+        blobProperty.set_valid(false);
+    }
+    return storage_outcome<blob_property>(blobProperty);
+}
+
+storage_outcome<blob_property> blob_client::get_blob_property_ctoken(const std::string& container, const std::string& blob, const std::string& sas_token, const std::atomic<bool>* token, void* cancelFunc)
+{
+    auto http = m_client->get_handle();
+    http->set_progress_function_and_arg(cancelFunc, (void*)token);
+    http->set_sas_token(sas_token);
 
     auto request = std::make_shared<get_blob_property_request>(container, blob);
 

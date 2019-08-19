@@ -75,9 +75,26 @@ namespace azure {  namespace storage_lite {
         return url;
     }
 
+    // RESCALE HACKED FUNCTION
+    // Does not sign a request if it already has been signed, used so that SAS credentials can be
+    // changed after creating a request without affecting request retries.
     void shared_access_signature_credential::sign_request(const storage_request_base &, http_base &h, const storage_url &, const storage_headers &) const
     {
-        std::string transformed_url = transform_url(h.get_url());
-        h.set_url(transformed_url);
+        std::string token = h.get_sas_token();
+        std::string url = h.get_url();
+        if (token.empty()) {
+            std::string transformed_url = transform_url(url);
+            h.set_sas_token(m_sas_token);
+            h.set_url(transformed_url);
+        } else {
+            if (url.find('?') != std::string::npos) {
+                url.append("&");
+            }
+            else {
+                url.append("?");
+            }
+            url.append(token);
+            h.set_url(url);
+        }
     }
 }}   // azure::storage_lite

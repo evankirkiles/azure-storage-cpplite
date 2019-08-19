@@ -46,6 +46,14 @@ namespace azure {  namespace storage_lite {
 
         virtual http_code status_code() const = 0;
 
+        // RESCALE HACK PART
+        virtual void set_progress_function_and_arg(void* func, void* ptr) = 0;
+
+        virtual void set_sas_token(const std::string& token) = 0;
+
+        virtual std::string get_sas_token() = 0;
+        // END RESCALE HACK PART
+
         virtual void set_input_stream(storage_istream s) = 0;
 
         virtual void reset_input_stream() = 0;

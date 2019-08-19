@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <atomic>
 #ifdef __linux__
 #include <syslog.h>
 #endif
@@ -88,6 +89,9 @@ namespace azure { namespace storage_lite {
         /// <param name="os">The target stream.</param>
         /// <returns>A <see cref="std::future" /> object that represents the current operation.</returns>
         AZURE_STORAGE_API storage_outcome<chunk_property> get_chunk_to_stream_sync(const std::string &container, const std::string &blob, unsigned long long offset, unsigned long long size, std::ostream &os);
+
+        // Re-implementation of the function above with support for a cancellation token's atomic bool
+        AZURE_STORAGE_API storage_outcome<chunk_property> get_chunk_to_stream_sync_ctoken(const std::string &container, const std::string &blob, unsigned long long offset, unsigned long long size, std::ostream &os, const std::string& sas_token, const std::atomic<bool>* token, void* cancelFunc);
 
         /// <summary>
         /// Intitiates an asynchronous operation  to download the contents of a blob to a stream.
@@ -177,6 +181,9 @@ namespace azure { namespace storage_lite {
         /// <param name="blob">The blob name.</param>
         /// <returns>A <see cref="std::future" /> object that represents the current operation.</returns>
         AZURE_STORAGE_API storage_outcome<blob_property> get_blob_property(const std::string &container, const std::string &blob);
+
+        // Re-implementation of the function above with support for a cancellation token's atomic bool
+        AZURE_STORAGE_API storage_outcome<blob_property> get_blob_property_ctoken(const std::string& container, const std::string& blob, const std::string& sas_token, const std::atomic<bool>* token, void* cancelFunc);
 
         /// <summary>
         /// Intitiates an asynchronous operation  to download the block list of a blob.

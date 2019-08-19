@@ -148,6 +148,8 @@ namespace azure {  namespace storage_lite {
                 }
             }
 
+            // RESCALE HACKED FUNCTION
+            // Make sure that implicitly cancelled requests are not retried
             static void submit_helper(
                 std::shared_ptr<std::promise<storage_outcome<void>>> promise,
                 std::shared_ptr<storage_outcome<void>> outcome,
@@ -167,7 +169,18 @@ namespace azure {  namespace storage_lite {
                     http->submit([promise, outcome, account, request, http, context, retry](http_base::http_code result, storage_istream s, CURLcode code)
                     {
                         std::string str(std::istreambuf_iterator<char>(s.istream()), std::istreambuf_iterator<char>());
-                        if (code != CURLE_OK || unsuccessful(result))
+                        if (code == CURLE_ABORTED_BY_CALLBACK)
+                        {
+                            // RESCALE HACK
+                            // Means cancellation token was called or some other callback issue which
+                            // won't be fixed by doing more retries, so simply stop the request stream.
+                            *outcome = storage_outcome<void>();
+                            auto error = storage_error();
+                            error.code = "CANCELLED";
+                            error.message = "Callback function raised error!";
+                            promise->set_value(storage_outcome<void>(error));
+                        }
+                        else if (code != CURLE_OK || unsuccessful(result))
                         {
                             auto error = context->xml_parser()->parse_storage_error(str);
                             error.code = std::to_string(result);
